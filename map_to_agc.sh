@@ -4,11 +4,11 @@
 
 set -Eeuo pipefail
 
-trap cleanup SIGINT SIGTERM ERR EXIT
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
 
 function help_message {
   cat <<HELP
-Usage: $(basename "${BASH_SOURCE[0]:-$0}") -a FILE -t DIR -o DIR -- [minimap-args]
+Usage: $SCRIPT_NAME -a FILE -t DIR -o DIR -- [minimap-args]
 
 Extract genomes from AGC assemblies and map sequences to them.
 This script can be safely run in parallel multiple times.
@@ -44,7 +44,7 @@ function parse_params {
     targets=
     output=
 
-    ARGS="$(getopt -o a:t:o: --long agc:,targets:,output: -- "$@")"
+    ARGS="$(getopt -o a:t:o:h --long agc:,targets:,output:,help --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
         case "$1" in
@@ -61,7 +61,6 @@ function parse_params {
             -- ) shift; break ;;
             * ) break ;;
         esac
-        shift
     done
 
     [[ -z "${agc_file-}" ]] && die "Missing required parameter -a/--agc"
@@ -127,5 +126,5 @@ target_fnames=($(ls "${targets}/" | grep "$FASTA_PATTERN"))
 
 mkdir -p "$output"
 agc listset "$agc_file" | while read genome; do
-    run "$genome"
+    process_genome "$genome"
 done
