@@ -21,7 +21,7 @@ Available options:
     -h, --help          Print this message and exit.
 
 Provide minimap2 arguments after --
-Default arguments are "-cx asm20 -t 3 -N 10 -p 0.5".
+    Default arguments are "-cx asm20 -t 3 -N 10 -p 0.5"
 HELP
 }
 
@@ -69,10 +69,10 @@ function parse_params {
 
     if [[ ${#@} -ne 0 ]]; then
         minimap2_args=("$@")
-        msg "Using minimap2 arguments ${minimap2_args[@]}"
     else
         minimap2_args="(-cx asm20 -t 3 -N 10 -p 0.5)"
     fi
+    msg "Using minimap2 arguments ${minimap2_args[@]}"
 }
 
 function remove_file {
@@ -104,10 +104,11 @@ function process_genome {
         # Pattern removes suffix .fa[sta][.gz]
         local contig="$(sed "s/${FASTA_PATTERN}//" <<<"$curr_targets")"
         msg "... Processing $contig @ $genome"
-        local contig_fa="${prefix}::${contig}.fa.gz"
-        agc getctg "$agc_file" "${contig}@${genome}" | gzip > "$contig_fa"
-        minimap2 "${minimap2_args[@]}" "$contig_fa" "${targets}/${curr_targets}" 2> /dev/null
-        rm "$contig_fa"
+        local contig_prefix="${prefix}::${contig}"
+        agc getctg "$agc_file" "${contig}@${genome}" | gzip > "${contig_prefix}.fa.gz"
+        minimap2 "${minimap2_args[@]}" "${contig_prefix}.fa.gz" "${targets}/${curr_targets}" \
+            2> "${contig_prefix}.log"
+        rm "${contig_prefix}.log" "${contig_prefix}.fa.gz"
     done | gzip > "${prefix}.paf.gz"
 
     # ===== END ======

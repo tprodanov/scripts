@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
-trap cleanup SIGINT SIGTERM ERR EXIT
+
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
 
 function help_message {
   cat <<HELP
-Usage: $(basename "${BASH_SOURCE[0]:-$0}") !!!!!
+Usage: $SCRIPT_NAME [TODO] INSERT USAGE
 
-!!!!! INSERT DESCRIPTION !!!!!!
+[TODO] INSERT DESCRIPTION
 
 Available options:
-
--h, --help      Print this help and exit.
+    -h, --help          Print this help and exit.
 HELP
 }
 
 function cleanup {
-    trap - SIGINT SIGTERM ERR EXIT
-    # ===== CLEANUP =====
+    trap - INT TERM ERR EXIT
+    # [TODO] CLEANUP CODE
 }
+trap cleanup INT TERM ERR EXIT
 
 function setup_colors {
     readonly RED="\e[31m"
@@ -35,13 +36,13 @@ function die {
 }
 
 function parse_params {
-    # ===== DEFAULT PARAMETER VALUES =====
+    # [TODO] DEFAULT PARAMETERS
 
-    ARGS="$(getopt -o abg:d: --long alpha,beta,gamma:,delta: -- "$@")"
+    ARGS="$(getopt -o h --long help --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
         case "$1" in
-            # ===== PARSE VALUES =====
+            # [TODO] PARSE VALUES
             -h | --help)
                 help_message; exit 0;
                 ;;
@@ -50,7 +51,6 @@ function parse_params {
             *)
                 break ;;
         esac
-        shift
     done
 
     args=("$@")
