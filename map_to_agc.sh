@@ -68,9 +68,9 @@ function parse_params {
     [[ -z "${output-}" ]]   && die "Missing required parameter -o/--output"
 
     if [[ ${#@} -ne 0 ]]; then
-        minimap2_args=("$@")
+        minimap2_args=( "$@" )
     else
-        minimap2_args="(-cx asm20 -t 3 -N 10 -p 0.5)"
+        minimap2_args=( -cx asm20 -t 3 -N 10 -p 0.5 )
     fi
     msg "Using minimap2 arguments ${minimap2_args[@]}"
 }
@@ -122,7 +122,7 @@ setup_colors
 parse_params "$@"
 
 readonly FASTA_PATTERN='\.fa\(sta\)\?\(\.gz\)\?$'
-target_fnames=($(ls "${targets}/" | grep "$FASTA_PATTERN"))
+target_fnames=( $(ls "${targets}/" | grep "$FASTA_PATTERN") )
 [[ ${#target_fnames[@]} -eq 0 ]] && die "No targets found at ${targets}/*.fa[.gz]"
 
 mkdir -p "$output"

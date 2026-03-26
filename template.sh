@@ -53,7 +53,7 @@ function parse_params {
         esac
     done
 
-    args=("$@")
+    args=( "$@" )
     # [[ -z "${param-}" ]] && die "Missing required parameter: param"
     # [[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
     # [[ ${#args[@]} -ne 0 ]] && die "Too many arguments (${args[@]})"
