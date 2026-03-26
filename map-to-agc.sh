@@ -59,7 +59,7 @@ function parse_params {
                 help_message; exit 0;
                 ;;
             -- ) shift; break ;;
-            * ) break ;;
+            * )  die "Unexpected argument $1" ;;
         esac
     done
 

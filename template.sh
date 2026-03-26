@@ -38,6 +38,7 @@ function die {
 function parse_params {
     # [TODO] DEFAULT PARAMETERS
 
+    # [TODO] Add options to getopt
     ARGS="$(getopt -o h --long help --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
@@ -46,17 +47,15 @@ function parse_params {
             -h | --help)
                 help_message; exit 0;
                 ;;
-            --)
-                shift; break ;;
-            *)
-                break ;;
+            -- ) shift; break ;;
+            * )  die "Unexpected argument $1" ;;
         esac
     done
 
+    # [[ $# -eq 0 ]] && die "Missing script arguments"
+    # [[ $# -ne 0 ]] && die "Too many arguments ($@)"
     args=( "$@" )
     # [[ -z "${param-}" ]] && die "Missing required parameter: param"
-    # [[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
-    # [[ ${#args[@]} -ne 0 ]] && die "Too many arguments (${args[@]})"
 }
 
 setup_colors
