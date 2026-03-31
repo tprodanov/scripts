@@ -27,12 +27,16 @@ function setup_colors {
 }
 
 function msg {
-    echo -e "$@" >&2
+    echo -e "$*" >&2
 }
 
-function die {
-    msg "${RED}[ERROR]${ENDCOLOR} $@"
-    exit 1
+function err {
+    msg "${RED}[ERROR]${ENDCOLOR} $*"
+}
+
+function panic {
+    err "$1"
+    exit "${2-1}" # Return 1 by default.
 }
 
 function parse_params {
@@ -48,14 +52,14 @@ function parse_params {
                 help_message; exit 0;
                 ;;
             -- ) shift; break ;;
-            * )  die "Unexpected argument $1" ;;
+            * )  panic "Unexpected argument $1" ;;
         esac
     done
 
-    # [[ $# -eq 0 ]] && die "Missing script arguments"
-    # [[ $# -ne 0 ]] && die "Too many arguments ($@)"
+    # [[ $# -eq 1 ]] || panic "Missing script arguments"
+    # [[ $# -eq 0 ]] || panic "Too many arguments ($*)"
     args=( "$@" )
-    # [[ -z "${param-}" ]] && die "Missing required parameter: param"
+    # [[ ! -z "${param-}" ]] || panic "Missing required parameter: param"
 }
 
 setup_colors

@@ -16,7 +16,7 @@ This script can be safely run in parallel multiple times.
 Available options:
     -a, --agc     FILE  Input AGC file.
     -t, --tarets  DIR   Directory with target sequences.
-                        Files should be named by contig (contig.fa[.gz]).
+                        Files should be named <contig>.fa[.gz].
     -o, --output  DIR   Output directory.
     -h, --help          Print this message and exit.
 
@@ -31,19 +31,19 @@ function setup_colors {
 }
 
 function msg {
-    echo -e "$@" >&2
+    echo -e "$*" >&2
 }
 
-function die {
-    msg "${RED}[ERROR]${ENDCOLOR} $@"
-    exit 1
+function err {
+    msg "${RED}[ERROR]${ENDCOLOR} $*"
+}
+
+function panic {
+    err "$1"
+    exit "${2-1}" # Return 1 by default.
 }
 
 function parse_params {
-    agc_file=
-    targets=
-    output=
-
     ARGS="$(getopt -o a:t:o:h --long agc:,targets:,output:,help --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
@@ -59,27 +59,20 @@ function parse_params {
                 help_message; exit 0;
                 ;;
             -- ) shift; break ;;
-            * )  die "Unexpected argument $1" ;;
+            * )  panic "Unexpected argument $1" ;;
         esac
     done
 
-    [[ -z "${agc_file-}" ]] && die "Missing required parameter -a/--agc"
-    [[ -z "${targets-}" ]]  && die "Missing required parameter -t/--targets"
-    [[ -z "${output-}" ]]   && die "Missing required parameter -o/--output"
+    [[ ! -z "${agc_file-}" ]] || panic "Missing required parameter -a/--agc"
+    [[ ! -z "${targets-}" ]]  || panic "Missing required parameter -t/--targets"
+    [[ ! -z "${output-}" ]]   || panic "Missing required parameter -o/--output"
 
     if [[ ${#@} -ne 0 ]]; then
         minimap2_args=( "$@" )
     else
         minimap2_args=( -cx asm20 -t 3 -N 10 -p 0.5 )
     fi
-    msg "Using minimap2 arguments ${minimap2_args[@]}"
-}
-
-function remove_file {
-    local fname="$1"
-    local code="$2"
-    rm -f "$fname"
-    return "$code"
+    msg "Using minimap2 arguments ${minimap2_args[*]}"
 }
 
 function process_genome {
@@ -95,14 +88,15 @@ function process_genome {
     if ! ( set -C; 2>/dev/null > "$lock_file" ); then
         return
     fi
-    trap "remove_file ${lock_file} 1" INT TERM ERR
+    trap 'rm -f "${lock_file}"; exit 1' INT TERM ERR
 
     # ===== START ======
 
     msg "Processing $genome"
     for curr_targets in "${target_fnames[@]}"; do
         # Pattern removes suffix .fa[sta][.gz]
-        local contig="$(sed "s/${FASTA_PATTERN}//" <<<"$curr_targets")"
+        local contig
+        contig="$(sed 's/\.fa\(sta\)\?\(\.gz\)\?$//' <<<"$curr_targets")"
         msg "... Processing $contig @ $genome"
         local contig_prefix="${prefix}::${contig}"
         agc getctg "$agc_file" "${contig}@${genome}" | gzip > "${contig_prefix}.fa.gz"
@@ -114,16 +108,16 @@ function process_genome {
     # ===== END ======
 
     touch "${ok_file}"
-    remove_file "${lock_file}" 0
+    rm -f "${lock_file}"
     trap - INT TERM ERR
 }
 
 setup_colors
 parse_params "$@"
 
-readonly FASTA_PATTERN='\.fa\(sta\)\?\(\.gz\)\?$'
-target_fnames=( $(ls "${targets}/" | grep "$FASTA_PATTERN") )
-[[ ${#target_fnames[@]} -eq 0 ]] && die "No targets found at ${targets}/*.fa[.gz]"
+shopt -s nullglob
+target_fnames=( "${targets}/"*.fa{,sta}{,.gz} )
+[[ ${#target_fnames[@]} -ne 0 ]] || panic "No targets found at ${targets}/*.fa[.gz]"
 
 mkdir -p "$output"
 agc listset "$agc_file" | while read genome; do

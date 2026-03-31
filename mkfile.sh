@@ -31,12 +31,16 @@ function setup_colors {
 }
 
 function msg {
-    echo -e "$@" >&2
+    echo -e "$*" >&2
 }
 
-function die {
-    msg "${RED}[ERROR]${ENDCOLOR} $@"
-    exit 1
+function err {
+    msg "${RED}[ERROR]${ENDCOLOR} $*"
+}
+
+function panic {
+    err "$1"
+    exit "${2-1}" # Return 1 by default.
 }
 
 function parse_params {
@@ -55,11 +59,11 @@ function parse_params {
                 help_message; exit 0;
                 ;;
             -- ) shift; break ;;
-            * )  die "Unexpected argument $1" ;;
+            * )  panic "Unexpected argument $1" ;;
         esac
     done
 
-    [[ $# -ge 2 ]] && die "Too many positional arguments ($@)"
+    [[ $# -le 1 ]] || panic "Too many positional arguments ($*)"
     # Use current directory by default
     prefix="${1-.}"
 }
@@ -80,7 +84,7 @@ function create_file {
         fi
         i=$((i + 1))
     done
-    die "Could not create files (${prefix}1${suffix} .. ${prefix}${max_count}${suffix})"
+    panic "Could not create files (${prefix}1${suffix} .. ${prefix}${max_count}${suffix})"
 }
 
 setup_colors
