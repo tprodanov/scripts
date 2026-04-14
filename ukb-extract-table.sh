@@ -3,8 +3,6 @@
 set -Eeuo pipefail
 
 readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
-readonly DEF_INSTANCE=mem1_ssd1_v2_x2
-readonly DEF_PRIORITY=low
 
 function help_message {
   cat <<HELP
@@ -19,8 +17,8 @@ Available options:
                          of format "pNNN[_iN][_aN]".
     -d, --dataset  FILE  Dataset path on the DnaNexus.
     -o, --output   STR   Prefix of the output file on the DnaNexus.
-        --instance STR   Job instance [${DEF_INSTANCE}].
-        --priority STR   Job priority [${DEF_PRIORITY}]
+        --instance STR   Job instance [${instance}].
+        --priority STR   Job priority [${priority}]
         --dry-run        Do not execute DnaNexus command.
     -h, --help           Print this help and exit.
 HELP
@@ -46,8 +44,8 @@ function panic {
 
 function parse_params {
     dry_run=no
-    instance="$DEF_INSTANCE"
-    priority="$DEF_PRIORITY"
+    instance=mem2_ssd1_v2_x4
+    priority=high
 
     ARGS="$(getopt -o i:f:d:o:h \
         --long ids:,fields:,dataset:,output:,instance:,priority:,dry-run,help \

@@ -6,8 +6,7 @@ set -Eeuo pipefail
 
 readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
 
-function help_message {
-  cat <<HELP
+function help_message { cat <<HELP
 Usage: $SCRIPT_NAME -a FILE -t DIR -o DIR -- [minimap-args]
 
 Extract genomes from AGC assemblies and map sequences to them.
