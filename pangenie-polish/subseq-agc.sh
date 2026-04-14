@@ -42,7 +42,7 @@ function panic {
 function parse_params {
     distance=5000
 
-    ARGS="$(getopt -o a:p:o:d:h --long agc:,pafs:,output:,distance:,help --name "$SCRIPT_NAME" -- "$@")"
+    ARGS="$(getopt -o a:t:p:o:d:h --long agc:,targets:,pafs:,output:,distance:,help --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
         case "$1" in
@@ -106,7 +106,7 @@ function process_genome {
                 'BEGIN{OFS=FS} $1 == target { print $6,$8,$9,target }' | \
             sort -k1,1V -k2,2n | \
             bedtools merge -d "$distance" -c 4 -o distinct \
-            > "${prefix}::${target}.bed"
+            > "${prefix}__${target}.bed"
 
         # Select largest region and convert it into "chr:start-end" format.
         local region
@@ -115,17 +115,17 @@ function process_genome {
                     len = $3 - $2;
                     region = ($1 ":" ($2+1) "-" $3);
                 }
-            } END { print region }' "${prefix}::${target}.bed")"
+            } END { print region }' "${prefix}__${target}.bed")"
 
         # If there is a region, extract it
         if [[ ! -z "$region" ]]; then
-            samtools faidx "${prefix}.fa" "$region" | gzip > "${prefix}::${target}.fa.gz"
+            samtools faidx "${prefix}.fa" "$region" | gzip > "${prefix}__${target}.fa.gz"
         fi
     done
-    rm "${prefix}.fa"
+    rm "${prefix}.fa"{,.fai}
 
-    cat "${prefix}::"*.bed | sort -k1,1V -2,2n > "${prefix}.bed"
-    rm "${prefix}::"*.bed
+    cat "${prefix}__"*.bed | sort -k1,1V -k2,2n | gzip > "${prefix}.bed.gz"
+    rm "${prefix}__"*.bed
 
     # ===== END ======
 
@@ -139,6 +139,7 @@ parse_params "$@"
 
 readarray -t targets < "$targets_file"
 [[ ${#targets[@]} -ne 0 ]] || panic "No targets found at ${targets_file}"
+(! grep -q __ "$targets_file") || panic "Target names should not contain __"
 
 mkdir -p "$output"
 agc listset "$agc_file" | while read genome; do
