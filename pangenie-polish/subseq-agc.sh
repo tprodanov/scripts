@@ -68,7 +68,7 @@ function parse_params {
     [[ ! -z "${agc_file-}" ]] || panic "Missing required parameter -a/--agc"
     [[ ! -z "${targets_file-}" ]] || panic "Missing required parameter -t/--targets"
     [[ ! -z "${paf_dir-}" ]]  || panic "Missing required parameter -p/--pafs"
-    [[  !-z "${output-}" ]]   || panic "Missing required parameter -o/--output"
+    [[ ! -z "${output-}" ]]   || panic "Missing required parameter -o/--output"
 }
 
 function process_genome {
