@@ -7,12 +7,14 @@ readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
 
 function help_message {
   cat <<HELP
-Usage: $SCRIPT_NAME -a FILE -t FILE -p DIR -o DIR [-d INT]
+Usage: $SCRIPT_NAME (-a FILE | -g DIR) -t FILE -p DIR -o DIR [-d INT]
 
-Extract subsequences from AGC genomes.
+Extract subsequences from assembly genomes.
 
 Available options:
     -a, --agc      FILE  Input AGC file.
+    -g, --genomes  DIR   Directory with various genome assemblies (.fa[.gz]).
+                         Mutually exclusive with -a/--agc.
     -t, --targets  FILE  File with target names (first PAF column).
     -p, --pafs     DIR   Directory with PAF.gz alignments.
     -o, --output   DIR   Output directory.
@@ -42,12 +44,15 @@ function panic {
 function parse_params {
     distance=5000
 
-    ARGS="$(getopt -o a:t:p:o:d:h --long agc:,targets:,pafs:,output:,distance:,help --name "$SCRIPT_NAME" -- "$@")"
+    ARGS="$(getopt -o a:g:t:p:o:d:h --long agc:,genomes:targets:,pafs:,output:,distance:,help \
+        --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
         case "$1" in
             -a | --agc )
                 agc_file="$2"; shift 2 ;;
+            -g | --genomes )
+                genomes_dir="$2";  shift 2 ;;
             -t | --targets )
                 targets_file="$2";  shift 2 ;;
             -p | --pafs )
@@ -65,19 +70,23 @@ function parse_params {
     done
 
     [[ $# -eq 0 ]] || panic "Too many arguments ($*)"
-    [[ ! -z "${agc_file-}" ]] || panic "Missing required parameter -a/--agc"
     [[ ! -z "${targets_file-}" ]] || panic "Missing required parameter -t/--targets"
     [[ ! -z "${paf_dir-}" ]]  || panic "Missing required parameter -p/--pafs"
     [[ ! -z "${output-}" ]]   || panic "Missing required parameter -o/--output"
+
+    [[ -z "${agc_file-}" ]] && have_agc=n || have_agc=y
+    [[ -z "${genomes_dir-}" ]] && have_genomes=n || have_genomes=y
+    [[ $have_agc != $have_genomes ]] || panic "Require either -a or -g, but not both"
 }
 
 function process_genome {
-    local genome="$1"
+    local arg="$1"
+    local genome_name
+    [[ $have_agc = y ]] && genome_name="$arg" || genome_name="$(basename "${arg%.fa*}")"
 
-    local prefix="${output}/${genome}"
+    local prefix="${output}/${genome_name}"
     local ok_file="${prefix}.ok"
     local lock_file="${prefix}.lock"
-
     if [[ -f "$ok_file" ]]; then
         return
     fi
@@ -86,16 +95,21 @@ function process_genome {
     fi
     trap 'rm -f "${lock_file}"; exit 1' INT TERM ERR
 
-    # ===== START ======
+    msg "Processing $genome_name"
 
-    local genome_paf="${paf_dir}/${genome}.paf.gz"
+    local genome_fasta
+    [[ $have_agc = y ]] && genome_fasta="${prefix}.fa" || genome_fasta="$arg"
+
+    local genome_paf="${paf_dir}/${genome_name}.paf.gz"
     if [[ ! -f "$genome_paf" ]]; then
         err "Alignment file ${genome_paf} does not exist"
         return 1
     fi
-    msg "Processing $genome (${genome_paf})"
-    agc getset "$agc_file" "$genome" > "${prefix}.fa"
-    samtools faidx "${prefix}.fa"
+
+    if [[ $have_agc = y ]]; then
+        agc getset "$agc_file" "$genome_name" > "${genome_fasta}"
+        samtools faidx "${genome_fasta}"
+    fi
 
     for target in "${targets[@]}"; do
         # First, take PAF for given target and convert to BED file, then sort and merge.
@@ -122,7 +136,8 @@ function process_genome {
             samtools faidx "${prefix}.fa" "$region" | gzip > "${prefix}__${target}.fa.gz"
         fi
     done
-    rm "${prefix}.fa"{,.fai}
+
+    [[ $have_agc = n ]] || rm "${genome_fasta}"{,.fai}
 
     cat "${prefix}__"*.bed | sort -k1,1V -k2,2n | gzip > "${prefix}.bed.gz"
     rm "${prefix}__"*.bed
@@ -142,6 +157,13 @@ readarray -t targets < "$targets_file"
 (! grep -q __ "$targets_file") || panic "Target names should not contain __"
 
 mkdir -p "$output"
-agc listset "$agc_file" | while read genome; do
-    process_genome "$genome"
-done
+if [[ $have_agc = y ]]; then
+    agc listset "$agc_file" | while read genome; do
+        process_genome "$genome"
+    done
+else
+    shopt -s nullglob
+    for genome in "${genomes_dir}"/*.fa{,sta}{,.gz}; do
+        process_genome "$genome"
+    done
+fi

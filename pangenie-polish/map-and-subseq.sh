@@ -18,6 +18,7 @@ Available options:
     -t, --targets  FILE  FASTA file with target sequences. Name lines should not contain spaces.
     -o, --output   DIR   Output directory.
     -d, --distance INT   Merge PAF entries if distance is smaller than INT [${distance}].
+    -f, --min-frac NUM   Minimum match fraction compared to target length [${min_frac}].
     -h, --help           Print this help and exit.
 
 Provide minimap2 arguments after --
@@ -44,9 +45,10 @@ function panic {
 }
 
 function parse_params {
+    min_frac=0.7
     distance=5000
 
-    ARGS="$(getopt -o a:g:t:o:d:h --long agc:,genomes:targets:,output:,distance:,help \
+    ARGS="$(getopt -o a:g:t:o:d:f:h --long agc:,genomes:targets:,output:,distance:,min-frac:,help \
         --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
@@ -61,6 +63,8 @@ function parse_params {
                 output="$2"; shift 2 ;;
             -d | --distance )
                 distance="$2"; shift 2 ;;
+            -l | --min-frac )
+                min_frac="$2"; shift 2 ;;
             -h | --help)
                 help_message; exit 0;
                 ;;
@@ -105,6 +109,7 @@ function process_genome {
 
     local genome_fasta
     if [[ $have_agc = y ]]; then
+        msg "    Extracting genome sequence"
         genome_fasta="${prefix}.fa"
         agc getset "$agc_file" "$genome_name" > "${genome_fasta}"
         samtools faidx "${genome_fasta}"
@@ -123,17 +128,25 @@ function process_genome {
     msg "    Extracting subsequences"
     for target in "${target_names[@]}"; do
         # First, take PAF for given target and convert to BED file, then sort and merge.
-        # Then, sort it and merge;
-        zcat "${paf_filename}" | \
-            awk -F$'\t' -v target="$target" \
-                'BEGIN{OFS=FS} $1 == target { print $6,$8,$9,target }' | \
+        # Finally, add target to non-empty lines using sed.
+        # Do this way because if we use bedtools merge -c4 on an empty file it throws error messages.
+        local target_len
+        target_len="$({
+            zcat "${paf_filename}" | \
+            awk -F$'\t' -v target="$target" 'BEGIN{OFS=FS}
+                $1 == target { print $6,$8,$9; target_len=$2; }
+                END { print target_len > "/dev/stderr"}' | \
             sort -k1,1V -k2,2n | \
-            bedtools merge -d "$distance" -c 4 -o distinct \
-            > "${prefix}/${target}.bed"
+            bedtools merge -d "$distance" | \
+            sed 's/\(.\)$/\1\t'"${target}/" \
+            > "${prefix}/${target}.bed";
+            } 2>&1)"
 
         # Select largest region and convert it into "chr:start-end" format.
         local region
-        region="$(awk -F$'\t' 'BEGIN{OFS=FS} {
+        region="$(awk -F$'\t' -v target_len="$target_len" -v min_frac="$min_frac" '
+            BEGIN{ OFS = FS; len = target_len * min_frac - 0.5 }
+            {
                 if ($3 - $2 > len) {
                     len = $3 - $2;
                     region = ($1 ":" ($2+1) "-" $3);
@@ -169,7 +182,7 @@ if [[ $have_agc = y ]]; then
         process_genome "$genome"
     done
 else
-    for genome in "${genomes_dir}"/*.fa{,sta}{,.gz}; do
-        process_genome "$genome"
+    for filename in "${genomes_dir}"/*.fa{,sta}{,.gz}; do
+        process_genome "$filename"
     done
 fi
