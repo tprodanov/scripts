@@ -14,7 +14,7 @@ This script can be safely run in parallel multiple times.
 
 Available options:
     -a, --agc     FILE  Input AGC file.
-    -t, --tarets  DIR   Directory with target sequences.
+    -t, --targets DIR   Directory with target sequences.
                         Files should be named <contig>.fa[.gz].
     -o, --output  DIR   Output directory.
     -h, --help          Print this message and exit.
