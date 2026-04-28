@@ -172,7 +172,8 @@ function process_genome {
 
         # If there is a region, extract it
         if [[ ! -z "$region" ]]; then
-            samtools faidx "$genome_fasta" "$region" | gzip > "${prefix}/${target}.fa.gz"
+            samtools faidx "$genome_fasta" "$region" | \
+                sed "1c>${short_name}" | gzip > "${prefix}/${target}.fa.gz"
         fi
     done
 
