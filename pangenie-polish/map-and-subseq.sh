@@ -68,7 +68,7 @@ function parse_params {
                 output="$2"; shift 2 ;;
             -d | --distance )
                 distance="$2"; shift 2 ;;
-            -l | --min-frac )
+            -f | --min-frac )
                 min_frac="$2"; shift 2 ;;
             -h | --help)
                 help_message; exit 0;
