@@ -141,8 +141,6 @@ function process_genome {
             && mv "${paf_filename}"{.tmp,}
     fi
 
-    # Clear the BED file, if it exists.
-    > "${prefix}.bed"
     msg "    Extracting subsequences"
     for target in "${target_names[@]}"; do
         # First, take PAF for given target and convert to BED file, then sort and merge.
@@ -182,14 +180,16 @@ function process_genome {
         if [[ ! -z "$region" ]]; then
             samtools faidx "$genome_fasta" "$region" $strand_arg | \
                 sed "1c>${short_name}" | gzip > "${prefix}/${target}.fa.gz"
-            cut -f-3 "${prefix}/${target}.bed" | sed "s/$/\t${target}/" >> "${prefix}.bed"
         fi
     done
 
     [[ $have_agc = n ]] || rm "${genome_fasta}"{,.fai}
 
-    sort -k1,1V -k2,2n "${prefix}.bed" | gzip "${prefix}.bed.gz"
-    rm "${prefix}.bed" "${prefix}"/*.bed
+    awk 'BEGIN { FS="\t"; OFS=FS } {
+        locus = gensub(/.*\/(.*).bed/, "\\1", 1, FILENAME)
+        print $1, $2, $3, ($4 >= 0 ? "+" : "-"), locus
+    }' "${prefix}"/*.bed | sort -k1,1V -k2,2n | gzip > "${prefix}.bed.gz"
+    rm "${prefix}"/*.bed
     # ===== END ======
 
     touch "${ok_file}"
