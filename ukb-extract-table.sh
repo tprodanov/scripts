@@ -13,7 +13,7 @@ Based on the field IDs, extract CSV.
 Available options:
     -i, --ids      FILE  Local text file with field IDs.
                          Only first column is taken, comments are ignored.
-    -f, --fields   FILE  Local text file with expanded field names
+    -f, --fields   FILE  Local text file with all field names
                          of format "pNNN[_iN][_aN]".
     -d, --dataset  FILE  Dataset path on the DnaNexus.
     -o, --output   STR   Prefix of the output file on the DnaNexus.

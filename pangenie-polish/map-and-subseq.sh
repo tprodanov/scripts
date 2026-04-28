@@ -7,7 +7,7 @@ readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
 
 function help_message {
   cat <<HELP
-Usage: $SCRIPT_NAME (-a FILE | -g DIR) -t FILE -o DIR [-d INT] [-- minimap-args]
+Usage: $SCRIPT_NAME (-a FILE | -g DIR) -t FILE -o DIR [-d INT] [args] [-- minimap-args]
 
 Maps target sequences to assembly genomes and extracts corresponding subregions.
 
@@ -15,6 +15,8 @@ Available options:
     -a, --agc      FILE  Input AGC file.
     -g, --genomes  DIR   Directory with various genome assemblies (.fa[.gz]).
                          Mutually exclusive with -a/--agc.
+    -n, --names    FILE  Optional: replace genome names (first column) with another name (second column).
+                         In case of -g/--genomes, first column should match file basename without extension.
     -t, --targets  FILE  FASTA file with target sequences. Name lines should not contain spaces.
     -o, --output   DIR   Output directory.
     -d, --distance INT   Merge PAF entries if distance is smaller than INT [${distance}].
@@ -47,8 +49,9 @@ function panic {
 function parse_params {
     min_frac=0.7
     distance=5000
+    names_file=
 
-    ARGS="$(getopt -o a:g:t:o:d:f:h --long agc:,genomes:targets:,output:,distance:,min-frac:,help \
+    ARGS="$(getopt -o a:g:n:t:o:d:f:h --long agc:,genomes:,names:,targets:,output:,distance:,min-frac:,help \
         --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
@@ -59,6 +62,8 @@ function parse_params {
                 genomes_dir="$2"; shift 2 ;;
             -t | --targets )
                 targets_file="$2"; shift 2 ;;
+            -n | --names )
+                names_file="$2"; shift 2 ;;
             -o | --output )
                 output="$2"; shift 2 ;;
             -d | --distance )
@@ -87,12 +92,26 @@ function parse_params {
     [[ $have_agc != $have_genomes ]] || panic "Require either -a or -g, but not both"
 }
 
+function load_names {
+    [[ ! -z "$names_file" ]] || return
+
+    declare -A names
+    while read name upd_name
+    do
+        names["$name"]="$upd_name"
+    done < "$names_file"
+}
+
 function process_genome {
     local arg="$1"
     local genome_name
     [[ $have_agc = y ]] && genome_name="$arg" || genome_name="$(basename "${arg%.fa*}")"
 
-    local prefix="${output}/${genome_name}"
+    local short_name
+    # :- if unset or empty, use $genome_name
+    short_name="${names["$genome_name"]:-"$genome_name"}"
+
+    local prefix="${output}/${short_name}"
     local ok_file="${prefix}.ok"
     local lock_file="${prefix}.lock"
     if [[ -f "$ok_file" ]]; then
@@ -104,7 +123,7 @@ function process_genome {
     trap 'rm -f "${lock_file}"; exit 1' INT TERM ERR
 
     # ===== START ======
-    msg "Processing $genome_name"
+    msg "Processing $short_name"
     mkdir -p "$prefix"
 
     local genome_fasta
@@ -172,6 +191,7 @@ function process_genome {
 
 setup_colors
 parse_params "$@"
+load_names
 
 # zcat -f opens plain files as well. sed -n does not print by default.
 readarray -t target_names < <(zcat -f "$targets_file" | sed -n 's/>//p' | sort -u)
