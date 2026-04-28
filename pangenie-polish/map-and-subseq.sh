@@ -93,9 +93,7 @@ function parse_params {
 }
 
 function load_names {
-    [[ ! -z "$names_file" ]] || return
-
-    declare -A names
+    [[ ! -z "$names_file" ]] || return 0
     while read name upd_name
     do
         names["$name"]="$upd_name"
@@ -191,6 +189,7 @@ function process_genome {
 
 setup_colors
 parse_params "$@"
+declare -A names
 load_names
 
 # zcat -f opens plain files as well. sed -n does not print by default.
