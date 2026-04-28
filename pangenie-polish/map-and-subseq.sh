@@ -94,8 +94,7 @@ function parse_params {
 
 function load_names {
     [[ ! -z "$names_file" ]] || return 0
-    while read name upd_name
-    do
+    while read name upd_name; do
         names["$name"]="$upd_name"
     done < "$names_file"
 }
@@ -142,45 +141,55 @@ function process_genome {
             && mv "${paf_filename}"{.tmp,}
     fi
 
+    # Clear the BED file, if it exists.
+    > "${prefix}.bed"
     msg "    Extracting subsequences"
     for target in "${target_names[@]}"; do
         # First, take PAF for given target and convert to BED file, then sort and merge.
-        # Finally, add target to non-empty lines using sed.
-        # Do this way because if we use bedtools merge -c4 on an empty file it throws error messages.
+        # As a fourth column in the BED file, output strand (+/-1) multiplied by region length.
+        # This value is then summed up by bedtools merge and used to determine resulting strand of the mapping.
         local target_len
         target_len="$({
             zcat "${paf_filename}" | \
             awk -F$'\t' -v target="$target" 'BEGIN{OFS=FS}
-                $1 == target { print $6,$8,$9; target_len=$2; }
+                $1 == target {
+                    print $6, $8, $9, ($5 == "+" ? 1 : -1) * ($4 - $3);
+                    target_len=$2;
+                }
                 END { print target_len > "/dev/stderr"}' | \
             sort -k1,1V -k2,2n | \
-            bedtools merge -d "$distance" | \
-            sed 's/\(.\)$/\1\t'"${target}/" \
+            bedtools merge -d "$distance" -c 4 -o sum 2> /dev/null \
             > "${prefix}/${target}.bed";
             } 2>&1)"
 
-        # Select largest region and convert it into "chr:start-end" format.
-        local region
-        region="$(awk -F$'\t' -v target_len="$target_len" -v min_frac="$min_frac" '
-            BEGIN{ OFS = FS; len = target_len * min_frac - 0.5 }
+        # Select largest region, output it into "chr:start-end@strand_arg" format,
+        # where strand_arg is either -i (reverse complement) or empty string (forward),
+        # which is then supplied to samtools faidx.
+        local region_strand region strand_arg
+        region_strand="$(awk -F$'\t' -v target_len="$target_len" -v min_frac="$min_frac" '
+            BEGIN{ OFS = "@"; len = target_len * min_frac - 0.5 }
             {
                 if ($3 - $2 > len) {
                     len = $3 - $2;
                     region = ($1 ":" ($2+1) "-" $3);
+                    strand_arg = $4 >= 0 ? "" : "-i";
                 }
-            } END { print region }' "${prefix}/${target}.bed")"
+            } END { print region, strand_arg }' "${prefix}/${target}.bed")"
+        region="${region_strand%@*}"
+        strand_arg="${region_strand#*@}"
 
         # If there is a region, extract it
         if [[ ! -z "$region" ]]; then
-            samtools faidx "$genome_fasta" "$region" | \
+            samtools faidx "$genome_fasta" "$region" $strand_arg | \
                 sed "1c>${short_name}" | gzip > "${prefix}/${target}.fa.gz"
+            cut -f-3 "${prefix}/${target}.bed" | sed "s/$/\t${target}/" >> "${prefix}.bed"
         fi
     done
 
     [[ $have_agc = n ]] || rm "${genome_fasta}"{,.fai}
 
-    cat "${prefix}"/*.bed | sort -k1,1V -k2,2n | gzip > "${prefix}.bed.gz"
-    rm "${prefix}"/*.bed
+    sort -k1,1V -k2,2n "${prefix}.bed" | gzip "${prefix}.bed.gz"
+    rm "${prefix}.bed" "${prefix}"/*.bed
     # ===== END ======
 
     touch "${ok_file}"
