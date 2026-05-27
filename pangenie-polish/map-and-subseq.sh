@@ -21,6 +21,7 @@ Available options:
     -o, --output   DIR   Output directory.
     -d, --distance INT   Merge PAF entries if distance is smaller than INT [${distance}].
     -f, --min-frac NUM   Minimum match fraction compared to target length [${min_frac}].
+    -N, --count    INT   Extract top N sequences (by length) for each haplotype and target [${count}].
     -h, --help           Print this help and exit.
 
 Provide minimap2 arguments after --
@@ -49,9 +50,11 @@ function panic {
 function parse_params {
     min_frac=0.7
     distance=5000
+    count=1
     names_file=
 
-    ARGS="$(getopt -o a:g:n:t:o:d:f:h --long agc:,genomes:,names:,targets:,output:,distance:,min-frac:,help \
+    ARGS="$(getopt -o a:g:n:t:o:d:f:N:h \
+        --long agc:,genomes:,names:,targets:,output:,distance:,min-frac:,count:,help \
         --name "$SCRIPT_NAME" -- "$@")"
     eval set -- "$ARGS"
     while :; do
@@ -70,6 +73,8 @@ function parse_params {
                 distance="$2"; shift 2 ;;
             -f | --min-frac )
                 min_frac="$2"; shift 2 ;;
+            -N | --count )
+                count="$2"; shift 2 ;;
             -h | --help)
                 help_message; exit 0;
                 ;;
@@ -120,6 +125,7 @@ function process_genome {
     trap 'rm -f "${lock_file}"; exit 1' INT TERM ERR
 
     # ===== START ======
+    set -x
     msg "Processing $short_name"
     mkdir -p "$prefix"
 
@@ -160,27 +166,22 @@ function process_genome {
             > "${prefix}/${target}.bed";
             } 2>&1)"
 
-        # Select largest region, output it into "chr:start-end@strand_arg" format,
-        # where strand_arg is either -i (reverse complement) or empty string (forward),
-        # which is then supplied to samtools faidx.
-        local region_strand region strand_arg
-        region_strand="$(awk -F$'\t' -v target_len="$target_len" -v min_frac="$min_frac" '
-            BEGIN{ OFS = "@"; len = target_len * min_frac - 0.5 }
-            {
-                if ($3 - $2 > len) {
-                    len = $3 - $2;
-                    region = ($1 ":" ($2+1) "-" $3);
-                    strand_arg = $4 >= 0 ? "" : "-i";
-                }
-            } END { print region, strand_arg }' "${prefix}/${target}.bed")"
-        region="${region_strand%@*}"
-        strand_arg="${region_strand#*@}"
-
-        # If there is a region, extract it
-        if [[ ! -z "$region" ]]; then
-            samtools faidx "$genome_fasta" "$region" $strand_arg | \
-                sed "1c>${short_name}" | gzip > "${prefix}/${target}.fa.gz"
-        fi
+        awk -F$'\t' -v target_len="$target_len" -v min_frac="$min_frac" '
+            BEGIN { OFS = FS; thresh = target_len * min_frac - 0.5 }
+            $3 - $2 > thresh {
+                region = ($1 ":" ($2+1) "-" $3);
+                strand = $4 >= 0 ? "+" : "-";
+                print region, strand, $3-$2;
+            }' "${prefix}/${target}.bed" | \
+            sort -k3,3nr | head -n "$count" | cat -n | \
+            while read index region strand length; do
+                local strand_arg suffix
+                # Either -i (reverse completement) or empty string (forward)
+                [[ "$strand" = "+" ]] && strand_arg="" || strand_arg="-i"
+                [[ "$index" -eq 1 ]] && suffix="" || suffix="-${index}"
+                samtools faidx "$genome_fasta" "$region" $strand_arg | \
+                    sed "1c>${short_name}${suffix}"
+            done | gzip > "${prefix}/${target}.fa.gz"
     done
 
     [[ $have_agc = n ]] || rm "${genome_fasta}"{,.fai}
