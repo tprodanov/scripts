@@ -20,7 +20,7 @@ Available options:
     -t, --targets  FILE  FASTA file with target sequences. Name lines should not contain spaces.
     -o, --output   DIR   Output directory.
     -d, --distance INT   Merge PAF entries if distance is smaller than INT [${distance}].
-    -f, --min-frac NUM   Minimum match fraction compared to target length [${min_frac}].
+    -f, --min-frac NUM   Output regions longer than NUM * target length [${min_frac}].
     -N, --count    INT   Extract top N sequences (by length) for each haplotype and target [${count}].
     -h, --help           Print this help and exit.
 
@@ -125,7 +125,6 @@ function process_genome {
     trap 'rm -f "${lock_file}"; exit 1' INT TERM ERR
 
     # ===== START ======
-    set -x
     msg "Processing $short_name"
     mkdir -p "$prefix"
 
