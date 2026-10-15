@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
+
+function help_message {
+cat <<HELP
+Usage: $SCRIPT_NAME -t STR -m STR -@ INT
+
+Request an interactive job with given runtime, memory and number of cpus.
+
+Available options:
+    -t, --time    STR   Request runtime (HH, HH:MM or HH:MM:SS).
+    -m, --memory  STR   Request given memory (e.g. 30G, 500M).
+    -@, --ncpus   INT   Request given number of cpus.
+    -p, --project FILE  Project name is written in this file [$project_file].
+    -h, --help          Print this help and exit.
+HELP
+}
+
+function setup_colors {
+    readonly RED="\e[31m"
+    readonly ENDCOLOR="\e[0m"
+}
+setup_colors
+
+function msg {
+    echo -e "$*" >&2
+}
+
+function err {
+    msg "${RED}[ERROR]${ENDCOLOR} $*"
+}
+
+function panic {
+    err "$1"
+    exit "${2-1}" # Return 1 by default.
+}
+
+function parse_params {
+    project_file="~/.project"
+
+    ARGS="$(getopt -o t:m:@:p:h --long time:,memory:,ncpus:,project:,help --name "$SCRIPT_NAME" -- "$@")"
+    eval set -- "$ARGS"
+    while :; do
+        case "$1" in
+            -t | --time)
+                time="${2}"; shift 2 ;;
+            -m | --memory)
+                memory="$2"; shift 2 ;;
+            -@ | --ncpus)
+                ncpus="$2"; shift 2 ;;
+            -p | --project)
+                project_file="$2"; shift 2 ;;
+            -h | --help)
+                help_message; exit 0 ;;
+            -- ) shift; break ;;
+            * )  panic "Unexpected argument $1" ;;
+        esac
+    done
+
+    [[ $# -eq 0 ]] || panic "Too many arguments ($*)"
+    [[ ! -z "${time-}" ]] || panic "Missing required parameter: -t/--time"
+    [[ ! -z "${memory-}" ]] || panic "Missing required parameter: -m/--memory"
+    [[ ! -z "${ncpus-}" ]] || panic "Missing required parameter: -@/--ncpus"
+    # Replace ~ with HOME directory.
+    project="$(cat "${project_file/#\~/$HOME}")"
+
+    # Anything with two colons. We could do more thorough checks but qsub will make these checks for us anyway.
+    TIME_REGEX='.*:.*:.*'
+    while [[ ! "$time" =~ $TIME_REGEX ]]; do
+        time="${time}:00"
+    done
+    NUM_ONLY='[0-9]+$'
+    if [[ "$memory" =~ $NUM_ONLY ]]; then
+        memory="${memory}G"
+    fi
+}
+
+parse_params "$@"
+
+cmd=( qsub -I -A "$project" -l "walltime=${time}" -l "select=1:ncpus=${ncpus}:mem=${memory}" )
+msg "${cmd[*]}"
+"${cmd[@]}"
+

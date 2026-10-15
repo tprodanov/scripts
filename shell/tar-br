@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
+
+function help_message {
+  cat <<HELP
+Usage:
+    $SCRIPT_NAME [brotli-args] -o file.tar.br files
+    $SCRIPT_NAME [brotli-args] -d file.tar.br
+
+Wrapper around tar + brotli compression.
+
+Available options:
+    -o, --output     FILE  Output tar.br file.
+    -!, --auto-out         Compress single file, use "file.tar.br" as tar name.
+    -d, --decompress FILE  Decompress this tar.br file.
+    -q, --quality    INT   Compression quality (0-11) [default: ${quality}].
+    -#                     Compression quality as a single number after -.
+    -v, --verbose          Print compressed/decompress files.
+    -h, --help             Print this help and exit.
+HELP
+}
+
+function cleanup {
+    trap - INT TERM ERR EXIT
+}
+trap cleanup INT TERM ERR EXIT
+
+function setup_colors {
+    readonly RED="\e[31m"
+    readonly ENDCOLOR="\e[0m"
+}
+setup_colors
+
+function msg {
+    echo -e "$*" >&2
+}
+
+function err {
+    msg "${RED}[ERROR]${ENDCOLOR} $*"
+}
+
+function panic {
+    err "$1"
+    exit "${2-1}" # Return 1 by default.
+}
+
+function parse_params {
+    quality=5
+    decompress=n
+    verbose_arg=""
+    brotli_args=()
+
+    while (( "$#" )); do
+        case "$1" in
+            -h | --help)
+                help_message;
+                exit 0;
+                ;;
+            -d | --decompress)
+                decompress=y;
+                tar_file="$2";
+                shift 2;
+                break;
+                ;;
+            -o | --output)
+                tar_file="$2";
+                shift 2;
+                break;
+                ;;
+            -! | --auto-out)
+                tar_file="!"
+                shift;
+                break;
+                ;;
+            -v | --verbose)
+                verbose_arg="-v"
+                shift;
+                ;;
+            -q | --quality)
+                quality="$2";
+                shift 2;
+                ;;
+            -[0-9])
+                quality="${1#-}"
+                shift;
+                ;;
+            *)
+                brotli_args+=("$1");
+                shift;
+                ;;
+        esac
+    done
+
+    [[ -n "${tar_file-}" ]] || panic "Either -o or -d must be specified"
+    [[ "$decompress" = n || $# -eq 0 ]] || panic "Cannot take any position arguments after -d file.tar.br"
+    [[ "$decompress" = y || $# -gt 0 ]] || panic "Require position arguments after -o file.tar.br"
+    if [[ "$tar_file" = "!" ]]; then
+        [[ $# -eq 1 ]] || panic "Cannot use automatic output name with more than one file"
+        tar_file="${1}.tar.br"
+    else
+        [[ "$tar_file" =~ \.tar.br$ ]] || msg "WARN: Tar file does not have .tar.br extension"
+    fi
+    files=( "$@" )
+}
+
+parse_params "$@"
+
+if [[ "$decompress" = y ]]; then
+    brotli "${brotli_args[@]+"${brotli_args[@]}"}" --concatenated --decompress --stdout "$tar_file" | \
+        tar -x $verbose_arg -f -
+else
+    # Do in two steps because this brotli better compression rates on files than on streams.
+    tmp_tar_file="${tar_file}-tmp"
+    trap 'rm -f "$tmp_tar_file"' INT TERM ERR EXIT
+    tar -c $verbose_arg -f "$tmp_tar_file" "${files[@]}"
+    brotli "${brotli_args[@]+"${brotli_args[@]}"}" $verbose_arg -q "$quality" --force --rm \
+        -o "$tar_file" "$tmp_tar_file"
+fi

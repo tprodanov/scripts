@@ -4,8 +4,7 @@ set -Eeuo pipefail
 
 readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
 
-function help_message {
-  cat <<HELP
+function help_message {cat <<HELP
 Usage: $SCRIPT_NAME [TODO] INSERT USAGE
 
 [TODO] INSERT DESCRIPTION
@@ -25,6 +24,7 @@ function setup_colors {
     readonly RED="\e[31m"
     readonly ENDCOLOR="\e[0m"
 }
+setup_colors
 
 function msg {
     echo -e "$*" >&2
@@ -49,8 +49,7 @@ function parse_params {
         case "$1" in
             # [TODO] PARSE VALUES
             -h | --help)
-                help_message; exit 0;
-                ;;
+                help_message; exit 0 ;;
             -- ) shift; break ;;
             * )  panic "Unexpected argument $1" ;;
         esac
@@ -62,5 +61,4 @@ function parse_params {
     # [[ ! -z "${param-}" ]] || panic "Missing required parameter: param"
 }
 
-setup_colors
 parse_params "$@"

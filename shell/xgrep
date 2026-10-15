@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 FILE" >&2
+    exit 1
+fi
+
+# Last argument (only works in bash)
+file="${@: -1}"
+
+case "$file" in
+    *.gz)   zgrep    "$@" ;;
+    *.bz2)  bzgrep   "$@" ;;
+    *.xz)   xzgrep   "$@" ;;
+    *.zst)  zstdgrep "$@" ;;
+    # lz4 and br do not have built-in grep functions, so we assume the last argument is the file.
+    *.lz4)  lz4 -dc "$file" | grep "${@:1:$#-1}" ;;
+    *.br)   brotli -dc "$file" | grep "${@:1:$#-1}" ;;
+    *)      grep "$@" ;;
+esac
