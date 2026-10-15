@@ -17,6 +17,6 @@ case "$file" in
     *.zst)  zstdgrep "$@" ;;
     # lz4 and br do not have built-in grep functions, so we assume the last argument is the file.
     *.lz4)  lz4 -dc "$file" | grep "${@:1:$#-1}" ;;
-    *.br)   brotli -dc "$file" | grep "${@:1:$#-1}" ;;
+    *.br)   brotli -Kdc "$file" | grep "${@:1:$#-1}" ;;
     *)      grep "$@" ;;
 esac

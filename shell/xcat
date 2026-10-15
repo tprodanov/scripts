@@ -16,6 +16,6 @@ case "$file" in
     *.xz)   xz     -dc "$@" ;;
     *.zst)  zstd   -dc "$@" ;;
     *.lz4)  lz4    -dc "$@" ;;
-    *.br)   brotli -dc "$@" ;;
+    *.br)   brotli -Kdc "$@" ;;
     *)      cat "$@" ;;
 esac
